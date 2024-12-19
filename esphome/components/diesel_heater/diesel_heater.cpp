@@ -12,109 +12,150 @@ static const char *const TAG = "heater";
 // Static instance pointer for ISR
 DieselHeater *DieselHeater::instance_ = nullptr;
 
-void DieselHeater::setup() {
-  if (this->data_pin_ != nullptr) {
-    this->data_pin_->setup();
-    this->data_pin_->pin_mode(gpio::FLAG_INPUT);
-
-    DieselHeater::instance_ = this;
-    // Attach interrupt to handle line changes
-    attachInterrupt(digitalPinToInterrupt(this->data_pin_->get_pin()), handle_line_change_isr, CHANGE);
-    this->last_edge_time_ = micros();
-  }
-
-  if (this->debug_pin_ != nullptr) {
-    this->debug_pin_->setup();
-    this->debug_pin_->pin_mode(gpio::FLAG_OUTPUT);
-  }
-
-#ifdef USE_ESP32_FRAMEWORK_ARDUINO
-  // Initialize timer for ESP32, but don't start yet
-  this->timer_ = timerBegin(0, 80, true); // 1 tick = 1µs at 80MHz/80 prescale
-  timerAttachInterrupt(this->timer_, &DieselHeater::on_timer_isr, true);
-#endif
-}
-
-void DieselHeater::loop() {
-  // If frame received, handle it
-  if (this->frame_received_) {
-    this->frame_received_ = false;
-    ESP_LOGD(TAG, "Frame received: 0x%02X", this->received_byte_);
-
-    // Reset state
-    this->current_state_ = ReadState::WAIT_FOR_START;
-    this->bit_count_ = 0;
-    this->stop_timing();
-  }
-}
-
 void DieselHeater::dump_config() {
   ESP_LOGCONFIG(TAG, "DieselHeater:");
   LOG_PIN("  Data Pin: ", this->data_pin_);
-  LOG_PIN("  Debug Pin: ", this->debug_pin_);
+  LOG_PIN("  Debug Pin 1: ", this->debug_pin_1_);
+  LOG_PIN("  Debug Pin 2: ", this->debug_pin_2_);
 }
 
-void IRAM_ATTR DieselHeater::handle_line_change_isr() {
-  if (DieselHeater::instance_ != nullptr) {
-    DieselHeater::instance_->handle_line_change();
+void DieselHeater::setup() {
+  DieselHeater::instance_ = this;
+  
+  if (this->data_pin_ != nullptr) {
+    this->data_pin_->setup();
+  }
+
+  if (this->debug_pin_1_ != nullptr) {
+    this->debug_pin_1_->setup();
+    this->debug_pin_1_->pin_mode(gpio::FLAG_OUTPUT);
+  }
+
+  if (this->debug_pin_2_ != nullptr) {
+    this->debug_pin_2_->setup();
+    this->debug_pin_2_->pin_mode(gpio::FLAG_OUTPUT);
+  }
+
+  if (this->data_pin_ != nullptr) {
+    this->data_pin_->setup();
+    this->data_pin_->pin_mode(gpio::FLAG_INPUT);
+  }
+
+}
+
+void DieselHeater::loop() {
+  switch (this->current_state_) {
+    case ReadState::F_REQ_IDLE:
+      this->start_data_read();
+      break;
+    default:
+      break;
   }
 }
 
-void IRAM_ATTR DieselHeater::handle_line_change() {
-  int level = digitalRead(this->data_pin_->get_pin());
-  uint32_t now = micros();
-  uint32_t duration = now - this->last_edge_time_;
-  this->last_edge_time_ = now;
+void DieselHeater::start_data_read() {
+  this->current_state_ = ReadState::F_REQ_WAIT_F_EDGE;
+  if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_INPUT);
+  this->bits_to_read_ = 23;
+  this->current_bit_index = 0;
+  attachInterrupt(digitalPinToInterrupt(this->data_pin_->get_pin()), static_on_pin_isr, FALLING);
+}
 
-  if (this->current_state_ == ReadState::WAIT_FOR_START) {
-    // Detect ~30ms low -> then line goes HIGH
-    if (level == HIGH) {
-      if (duration > 20000 && duration < 40000) {
-        ESP_LOGD(TAG, "Start condition detected, time passed: %d", duration);
-        // Start condition detected
-        this->current_state_ = ReadState::READING_BITS;
-        this->bit_count_ = 0;
-        this->sub_bit_count_ = 0;
-        this->current_byte_ = 0;
-        delayMicroseconds(SUB_BIT_US / 2); // Skip first half of first sub-bit
-        this->start_timing();
+void IRAM_ATTR DieselHeater::static_on_pin_isr() {
+  DieselHeater::instance_->on_pin_isr();
+}
+
+void IRAM_ATTR DieselHeater::static_on_timer_isr() {
+  DieselHeater::instance_->on_timer_isr();
+}
+
+// static interrupt handlers
+void IRAM_ATTR DieselHeater::on_pin_isr() {
+  uint32_t duration = 0;
+  switch (this->current_state_) {
+    case ReadState::F_REQ_WAIT_F_EDGE:
+      this->time_frame_prefix_started = micros();
+      this->current_state_ = ReadState::F_REQ_WAIT_R_EDGE;
+      attachInterrupt(digitalPinToInterrupt(this->data_pin_->get_pin()), static_on_pin_isr, RISING);
+      break;
+    case ReadState::F_REQ_WAIT_R_EDGE:
+      detachInterrupt(digitalPinToInterrupt(this->data_pin_->get_pin())); 
+      duration = micros() - this->time_frame_prefix_started;
+      if (duration > 29000 && duration < 31000) {
+          this->start_timer(TIME_PERIOD_4040us/2, static_on_timer_isr);
+          this->current_state_ = ReadState::F_REQ_READ;
+          break;
       }
+      this->current_state_ = ReadState::F_REQ_IDLE;
+      break;
+    case ReadState::F_REQ_WAIT_END:
+      // At this point a request end has been detected. 
+      // IF operating mode is heater, a valid response must be sent
+      // IF operating mode is shared, we start reading response from heater 
+      if (this->op_mode == OperatingMode::MODE_HEATER) {
+        this->current_state_ = ReadState::F_RESP_PRE_WAIT;
+        timer1_attachInterrupt(static_on_timer_isr);
+        this->current_bit_index = 0;
+        timer1_write(TIME_PERIOD_1700us);
+      } else if (this->op_mode == OperatingMode::MODE_CONTROLLER_SHARED) {
+        // this->current_state_ = ReadState::F_RESP_PRE_WAIT;
+      } else {
+
+      }
+    default:
+      break;
+  }
+}
+
+void IRAM_ATTR DieselHeater::on_timer_isr() {
+  uint8_t bit = 0;
+  switch (this->current_state_)
+  {
+  case ReadState::F_REQ_READ:
+    timer1_write(TIME_PERIOD_4040us);
+    bit = (uint8_t)digitalRead(this->data_pin_->get_pin());
+    if (this->current_bit_index >= this->bits_to_read_) {
+      this->current_state_ = ReadState::F_REQ_WAIT_END;
+      timer1_detachInterrupt();
+      attachInterrupt(digitalPinToInterrupt(this->data_pin_->get_pin()), static_on_pin_isr, RISING);
+    } else {
+      timer1_write(TIME_PERIOD_4040us);
     }
+
+    this->current_bit_index++;
+    break;
+  case ReadState::F_RESP_PRE_WAIT:
+    this->current_state_ = ReadState::F_RESP_WRITE;
+    if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_OUTPUT);
+    digitalWrite(this->data_pin_->get_pin(), LOW);
+    timer1_write(TIME_PERIOD_30ms);
+    break;
+  case ReadState::F_RESP_WRITE:
+    timer1_write(TIME_PERIOD_4040us);
+    digitalWrite(this->data_pin_->get_pin(), this->idle_response[this->current_bit_index]);
+    if (this->current_bit_index >= 48) {
+      this->current_state_ = ReadState::F_REQ_IDLE;
+      timer1_detachInterrupt();
+    }
+    this->current_bit_index++;
+    break;
+  default:
+    break;
   }
 }
 
-void DieselHeater::decode_sub_bits() {
-  // '1' bit = 110
-  // '0' bit = 100
-  if (sub_bit_buffer_[0] == 1 && sub_bit_buffer_[1] == 1 && sub_bit_buffer_[2] == 0) {
-    this->current_byte_ = (this->current_byte_ << 1) | 1;
-  } else if (sub_bit_buffer_[0] == 1 && sub_bit_buffer_[1] == 0 && sub_bit_buffer_[2] == 0) {
-    this->current_byte_ = (this->current_byte_ << 1) | 0;
-  } else {
-    // Pattern error handling if needed
-  }
-
-  this->bit_count_++;
-  this->sub_bit_count_ = 0;
-
-  if (this->bit_count_ == 8) {
-    // Full byte received
-    this->received_byte_ = this->current_byte_;
-    this->frame_received_ = true;
-    this->current_state_ = ReadState::FRAME_COMPLETE;
-    this->bit_count_ = 0;
-
-  }
+void DieselHeater::decode_raw_request() {
+  // this->raw_request_buffer >> 1;
+  // for(int i = 0; i < this->bits_to_read_/3; i++) {
+  //   decoded_request_buffer[bits_to_read_/3-i] = this->raw_request_buffer & 0x01 
+  // }
 }
 
-void DieselHeater::start_timing() {
+void DieselHeater::start_timer(uint32_t us, void (*fn)()) {
 #ifdef USE_ESP8266
-  // On ESP8266 use waveform to get ~4.04ms callback
-  // We'll just split SUB_BIT_US evenly: 2020us high, 2020us low = 4040us total
-
-  // First event must happen after 2020us
-  startWaveform(DUMMY_WAVEFORM_PIN, SUB_BIT_US, SUB_BIT_US);
-  setTimer1Callback(&waveform_callback);
+  timer1_attachInterrupt(fn);
+  timer1_enable(TIM_DIV16, TIM_EDGE, TIM_SINGLE);
+  timer1_write(us);
 #endif
 
 #ifdef USE_ESP32_FRAMEWORK_ARDUINO
@@ -123,10 +164,11 @@ void DieselHeater::start_timing() {
 #endif
 }
 
-void DieselHeater::stop_timing() {
+void DieselHeater::stop_timer() {
 #ifdef USE_ESP8266
-  stopWaveform(DUMMY_WAVEFORM_PIN);
-  setTimer1Callback(nullptr);
+  timer1_detachInterrupt();
+  timer1_disable();
+  timer1_write(0);
 #endif
 
 #ifdef USE_ESP32_FRAMEWORK_ARDUINO
@@ -134,41 +176,13 @@ void DieselHeater::stop_timing() {
 #endif
 }
 
-#ifdef USE_ESP8266
-uint32_t IRAM_ATTR DieselHeater::waveform_callback() {
-  // Each callback ~4.04ms
-  if (DieselHeater::instance_ != nullptr) {
-    DieselHeater::instance_->on_timer_callback();
-
-  }
-  if (DieselHeater::instance_->frame_received_) {
-    return 0;
-  } else {
-    return microsecondsToClockCycles(SUB_BIT_US);
-  }
-}
-#endif
-
 #ifdef USE_ESP32_FRAMEWORK_ARDUINO
 void IRAM_ATTR DieselHeater::on_timer_isr() {
   if (DieselHeater::instance_ != nullptr) {
-    DieselHeater::instance_->on_timer_callback();
+    DieselHeater::instance_->data_reading_callback();
   }
 }
 #endif
 
-void IRAM_ATTR DieselHeater::on_timer_callback() {
-  this->toggle_debug_pin();
-  if (this->current_state_ == ReadState::READING_BITS) {
-    uint8_t level = (uint8_t)digitalRead(this->data_pin_->get_pin());
-    this->sub_bit_buffer_[this->sub_bit_count_] = level;
-    this->sub_bit_count_++;
-
-    if (this->sub_bit_count_ == 3) {
-      this->decode_sub_bits();
-    }
-  }
-}
-
-}  // namespace heater
+}  // namespace diesel_heater
 }  // namespace esphome
