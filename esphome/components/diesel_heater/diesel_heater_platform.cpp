@@ -38,7 +38,6 @@ void PlatformInterface::start_timer(uint32_t us) {
 void PlatformInterface::stop_timer() {
 #ifdef USE_ESP8266
   timer1_detachInterrupt();
-  timer1_disable();
   timer1_write(0);
 #endif
 
