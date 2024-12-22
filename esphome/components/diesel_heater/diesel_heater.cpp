@@ -42,7 +42,7 @@ void DieselHeater::setup() {
 void DieselHeater::loop() {
   // If we are idle, start waiting for a frame
   if (sm_.current_state() == ReadState::F_REQ_IDLE) {
-    start_data_read();
+    start_data_read(23);
   }
   if (this->temperature_sensor_ != nullptr) {
     if (this->system_state.heat_exchanger_temp != this->temperature_sensor_->state) {
@@ -84,11 +84,26 @@ void DieselHeater::loop() {
       this->spark_plug_sensor_->publish_state(this->system_state.spark_plug);
     }
   }
+  if (this->power_switch_ != nullptr) {
+    if (this->system_state.on != this->power_switch_->state) {
+      this->power_switch_->publish_state(this->system_state.on);
+    }
+  }
+  if (this->mode_switch_ != nullptr) {
+    if (this->system_state.mode != this->mode_switch_->state) {
+      this->mode_switch_->publish_state(this->system_state.mode);
+    }
+  }
+  if (this->alpine_switch_ != nullptr) {
+    if (this->system_state.alpine != this->alpine_switch_->state) {
+      this->alpine_switch_->publish_state(this->system_state.alpine);
+    }
+  }
 }
 
-void DieselHeater::start_data_read() {
+void DieselHeater::start_data_read(uint8_t bits) {
   sm_.set_state(ReadState::F_REQ_WAIT_F_EDGE);
-  sm_.set_bits_to_read(23);
+  sm_.set_bits_to_read(bits);
   sm_.set_bit_index(0);
   // Wait for falling edge
   platform_.attach_pin_interrupt(this->data_pin_, false /* falling edge */);
@@ -117,21 +132,45 @@ void DieselHeater::on_pin_isr() {
       }
       break;
     }
+    case ReadState::F_RESP_WAIT_F_EDGE:
+      platform_.detach_pin_interrupt();
+      sm_.set_state(ReadState::F_RESP_WAIT_R_EDGE);
+      platform_.attach_pin_interrupt(this->data_pin_, true /* rising edge */);
+      break;
+
+    case ReadState::F_RESP_WAIT_R_EDGE:
+      platform_.detach_pin_interrupt();
+      platform_.start_timer(TIME_PERIOD_4040us/2);
+      sm_.set_state(ReadState::F_RESP_READ);
+      sm_.set_bits_to_read(47);
+      sm_.set_bit_index(0);
+      break;
+
+    case ReadState::F_RESP_WAIT_END:
+      platform_.detach_pin_interrupt();
+      sm_.set_state(ReadState::F_REQ_IDLE);
+      if (this->request_queue_.size() > 0) {
+        RequestType req = this->request_queue_.front();
+        this->request_queue_.pop();
+        Response resp = generate_response(req, system_state, 0);
+        for (uint8_t i = 0; i < 48; i++) {
+          current_response[i] = resp.data & (1 << i);
+        }
+        sm_.set_state(ReadState::F_REQ_PRE_WAIT);
+        platform_.start_timer(TIME_PERIOD_1700us);
+        // pull data line high for 1700us
+      }
+      break;
 
     case ReadState::F_REQ_WAIT_END:
       toggle_debug_pin(this->debug_pin_2_, 5);
-      // Request ended, decide next step based on op_mode
-      if (op_mode_ == OperatingMode::MODE_HEATER) {
+      if (op_mode_ == OperatingMode::MODE_SIMULATION) {
+        // Simulate response
         sm_.set_state(ReadState::F_RESP_PRE_WAIT);
-        // Prepare to send response
-        // Wait ~1.7ms and then send idle_response_
-        // platform_.stop_timer();
-        // Reuse timer for response pre-wait
         platform_.start_timer(TIME_PERIOD_1700us);
-      } else if (op_mode_ == OperatingMode::MODE_CONTROLLER_SHARED) {
-        // If needed, handle shared mode reading
-      } else {
-        // Exclusive controller mode handling
+      } else if (op_mode_ == OperatingMode::MODE_SHARED) {
+        sm_.set_state(ReadState::F_RESP_WAIT_F_EDGE);
+        platform_.attach_pin_interrupt(this->data_pin_, false /* falling edge */);
       }
       break;
 
@@ -172,23 +211,74 @@ void DieselHeater::on_timer_isr() {
       handle_request(current_request, current_response, system_state);
       break;
 
-    case ReadState::F_RESP_WRITE: {
+    case ReadState::F_RESP_WRITE:
       // Write response bits
       platform_.start_timer(TIME_PERIOD_4040us);
-      uint8_t idx = sm_.current_bit_index();
-      digitalWrite(this->data_pin_->get_pin(), this->current_response[idx]);
+      digitalWrite(this->data_pin_->get_pin(), this->current_response[sm_.current_bit_index()]);
       sm_.increment_bit_index();
       if (sm_.current_bit_index() > 48) {
         // Done sending response
         sm_.reset();
         // sm_.set_state(ReadState::F_REQ_IDLE);
-        this->start_data_read();
+        this->start_data_read(23);
         if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_INPUT);
         platform_.stop_timer();
-
       }
       break;
-    }
+    
+    case ReadState::F_RESP_WAIT_F_EDGE:
+      platform_.detach_pin_interrupt();
+      sm_.set_state(ReadState::F_RESP_WAIT_R_EDGE);
+      platform_.attach_pin_interrupt(this->data_pin_, true /* rising edge */);
+      break;
+
+    case ReadState::F_RESP_READ:
+      this->toggle_debug_pin(this->debug_pin_1_, 5);
+      current_response[sm_.current_bit_index()] = (uint8_t) digitalRead(this->data_pin_->get_pin());
+      // Store bit if needed (this would be in a buffer)
+      sm_.increment_bit_index();
+      
+      if (sm_.current_bit_index() > sm_.bits_to_read()) {
+        sm_.set_state(ReadState::F_RESP_WAIT_END);
+        platform_.stop_timer();
+        platform_.attach_pin_interrupt(this->data_pin_, true /* rising */);
+
+        // Read response bits and update system state
+        ESP_LOGD("", "SystemState[ON]: %d", system_state.on);
+        handle_response(current_response, system_state);
+        ESP_LOGD("", "SystemState[ON]: %d", system_state.on);
+        // if request_queue_ is not empty, generate request and read response
+        if (this->request_queue_.size() > 0) {
+          // current_request = generate_request(this->request_queue_.front());
+          // this->request_queue_.pop();
+          // sm_.set_state(ReadState::F_REQ_PRE_WAIT);
+          // platform_.start_timer(TIME_PERIOD_1700us);
+        }
+      } else {
+        // Continue reading bits at 4.04ms intervals
+        timer1_write(TIME_PERIOD_4040us);
+      }
+      break;
+    case ReadState::F_REQ_PRE_WAIT:
+      sm_.set_state(ReadState::F_REQ_WRITE);
+      platform_.start_timer(TIME_PERIOD_30ms);
+      if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_OUTPUT);
+      digitalWrite(this->data_pin_->get_pin(), LOW);
+
+      break;
+    case ReadState::F_REQ_WRITE:
+      platform_.start_timer(TIME_PERIOD_4040us);
+      sm_.set_bit_index(0);
+      digitalWrite(this->data_pin_->get_pin(), this->current_response[sm_.current_bit_index()]);
+      sm_.increment_bit_index();
+      if (sm_.current_bit_index() > 24) {
+        // Done sending response
+        sm_.reset();
+        // sm_.set_state(ReadState::F_REQ_IDLE);
+        // this->start_data_read(48);
+        if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_INPUT);
+        platform_.stop_timer();
+      } 
 
     default:
       break;

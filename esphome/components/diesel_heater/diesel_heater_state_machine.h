@@ -5,19 +5,31 @@ namespace esphome {
 namespace diesel_heater {
 
 enum class OperatingMode {
-  MODE_HEATER,
-  MODE_CONTROLLER_EXCLUSIVE,
-  MODE_CONTROLLER_SHARED
+  MODE_SHARED, // Heater connected to original controller, we read heater responses and write commands when needed
+  MODE_EXCLUSIVE, // There is no original controller, we control the heater directly, sending all requests and reading responses
+  MODE_SIMULATION // We simulate the heater by reading commands from a controller and sending (dummy) responses too see how the controller reacts
 };
 
 enum class ReadState {
   F_REQ_IDLE,         // Waiting for falling edge then 30ms low
+  
   F_REQ_WAIT_F_EDGE,
   F_REQ_WAIT_R_EDGE,  // Rising edge after 30ms low
   F_REQ_READ,         // Reading bits at ~4.04ms intervals
   F_REQ_WAIT_END,
+  
   F_RESP_PRE_WAIT,
-  F_RESP_WRITE
+  F_RESP_WRITE,       // Writing bits at ~4.04ms intervals
+
+  F_RESP_WAIT_F_EDGE,
+  F_RESP_WAIT_R_EDGE,
+  F_RESP_READ,
+  F_RESP_WAIT_END,
+
+  F_REQ_PRE_WAIT,
+  F_REQ_WRITE,
+  
+
 };
 
 class StateMachine {

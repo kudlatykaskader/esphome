@@ -32,23 +32,50 @@ class DieselHeater : public Component {
   void set_fan_sensor(sensor::Sensor *fan_sensor) { fan_sensor_ = fan_sensor; };
   void set_pump_sensor(sensor::Sensor *pump_sensor) { pump_sensor_ = pump_sensor; };
   void set_spark_plug_sensor(sensor::Sensor *spark_plug_sensor) { spark_plug_sensor_ = spark_plug_sensor; };
-
   void set_power_switch(switch_::Switch *sw) { power_switch_ = sw; }
-
-  bool get_power_switch() { return this->system_state.on; }
-  void set_power_switch(bool state) { this->system_state.on = state; }
-
-  bool get_mode_switch() { return this->system_state.mode; }
-  void set_mode_switch(bool state) { this->system_state.mode = state; }
-
-  bool get_alpine_switch() { return this->system_state.alpine; }
-  void set_alpine_switch(bool state) { this->system_state.alpine = state; }
-
+  void set_alpine_switch(switch_::Switch *sw) { alpine_switch_ = sw; }
+  void set_mode_switch(switch_::Switch *sw) { mode_switch_ = sw; }
   void set_power_up_button(button::Button *button) { power_up_button_ = button; }
   void set_power_down_button(button::Button *button) { power_down_button_ = button; }
 
-  void increase_power() { this->system_state.adjust_heating_power_up(); }
-  void decrease_power() { this->system_state.adjust_heating_power_down(); }
+  // bool get_power_switch() { return this->system_state.on; }
+  // void set_power_switch(bool state) { this->system_state.on = state; }
+  bool set_power_switch_state(bool state) { 
+    if (this->system_state.on != state) {
+      this->system_state.on = state;
+      this->request_queue_.push(RequestType::POWER_TOGGLE);
+      return true;
+    }
+    return false;
+  }
+
+  bool set_mode_switch_state(bool state) { 
+    if (this->system_state.mode != state) {
+      this->system_state.mode = state;
+      // this->request_queue_.push(RequestType::MODE_TOGGLE);
+      return true;
+    }
+    return false;
+  }
+
+  bool set_alpine_switch_state(bool state) { 
+    if (this->system_state.alpine != state) {
+      this->system_state.alpine = state;
+      this->request_queue_.push(RequestType::ALPINE_TOGGLE);
+      return true;
+    }
+    return false;
+  }
+
+  void increase_power() { 
+    this->system_state.adjust_heating_power_up();
+    this->request_queue_.push(RequestType::POWER_UP);
+  }
+  
+  void decrease_power() {
+    this->system_state.adjust_heating_power_down();
+    this->request_queue_.push(RequestType::POWER_DOWN);
+  }
 
   static DieselHeater *instance_;
 
@@ -61,7 +88,7 @@ class DieselHeater : public Component {
   InternalGPIOPin *debug_pin_1_{nullptr};
   InternalGPIOPin *debug_pin_2_{nullptr};
 
-  OperatingMode op_mode_{OperatingMode::MODE_HEATER};
+  OperatingMode op_mode_{OperatingMode::MODE_SHARED};
 
   // State machine instance
   StateMachine sm_;
@@ -77,7 +104,7 @@ class DieselHeater : public Component {
   bool current_request[24] = {};
   bool current_response[48] = {};
 
-  void start_data_read();
+  void start_data_read(uint8_t bits);
   void toggle_debug_pin(InternalGPIOPin *pin, uint32_t delay);
 
   void handle_reading_state();
@@ -104,6 +131,9 @@ class DieselHeater : public Component {
   // update internal in milliseconds
   uint32_t update_interval_{5 * 1000};
   uint32_t last_update_{0};
+
+  // create a command queue for handling requests
+  std::queue<RequestType> request_queue_;
 };
 
 }  // namespace diesel_heater

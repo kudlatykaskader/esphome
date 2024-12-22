@@ -1,5 +1,7 @@
 esphome:
-  name: heater-simulator
+  name: heater-simulator-adapter
+  name_add_mac_suffix: true
+  
 
 esp8266:
   board: d1_mini
@@ -15,9 +17,15 @@ logger:
 #   - platform: esphome
 #     password: ""
 
-# wifi:
-#   ssid: ZagrodySzopenChoj
-#   password: j6dbv7mo8996
+wifi:
+  ssid: ZagrodySzopenChoj
+  password: j6dbv7mo8996
+
+mqtt:
+  broker: csrv01.postio.pl
+  username: consult3420
+  password: YUHzsH3CxP2VQdShjUle7qHM
+  discovery_unique_id_generator: mac
 
 # captive_portal:
 
@@ -29,4 +37,57 @@ external_components:
 
 diesel_heater:
   data_pin: 5
-  debug_pin: 4
+  debug_pin_1: 4
+  debug_pin_2: 0
+
+button:
+  - platform: diesel_heater
+    power_up:
+      name: "Increase Power"
+      id: power_up_button
+    power_down:
+      name: "Decrease Power"
+      id: power_down_button
+
+switch:
+  - platform: diesel_heater
+    power:
+      name: "Heater Adapter Power"
+      id: power_switch
+    mode:
+      name: "Heater Adapter Mode"
+      id: mode_switch
+    alpine:
+      name: "Heater Adapter Alpine"
+      id: alpine_switch
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    update_interval: 60s
+  - platform: diesel_heater
+    temperature:
+      name: "Heater Adapter Temperature"
+      id: heater_temperature
+    voltage:
+      name: "Heater Adapter Voltage"
+      id: heater_voltage
+    power:
+      name: "Heater Adapter Power"
+      id: heater_power
+    mode:
+      name: "Heater Adapter Mode"
+      id: heater_mode
+    alpine:
+      name: "Heater Adapter Alpine"
+      id: heater_alpine
+    fan:
+      name: "Heater Adapter Fan"
+      id: heater_fan
+    pump:
+      name: "Heater Adapter Pump"
+      id: heater_pump
+    spark_plug:
+      name: "Heater Adapter Spark"
+      id: heater_spark
+

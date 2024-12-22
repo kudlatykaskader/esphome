@@ -53,7 +53,15 @@ CONFIG_SCHEMA = (
             cv.Optional("power"): switch.switch_schema(
                 heater_ns.class_("PowerSwitch", switch.Switch),
                 icon="mdi:power",
-            )
+            ),
+            cv.Optional("mode"): switch.switch_schema(
+                heater_ns.class_("ModeSwitch", switch.Switch),
+                icon="mdi:power",
+            ),
+            cv.Optional("alpine"): switch.switch_schema(
+                heater_ns.class_("AlpineSwitch", switch.Switch),
+                icon="mdi:power",
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -63,7 +71,7 @@ CONFIG_SCHEMA = (
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_HEATER_ID])
 
-    for switch_type in ["power"]:
+    for switch_type in ["power", "mode", "alpine"]:
         if conf := config.get(switch_type):
             sw_var = await switch.new_switch(conf)
             await cg.register_parented(sw_var, parent)
