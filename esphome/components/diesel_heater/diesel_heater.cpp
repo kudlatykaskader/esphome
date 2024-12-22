@@ -44,6 +44,46 @@ void DieselHeater::loop() {
   if (sm_.current_state() == ReadState::F_REQ_IDLE) {
     start_data_read();
   }
+  if (this->temperature_sensor_ != nullptr) {
+    if (this->system_state.heat_exchanger_temp != this->temperature_sensor_->state) {
+      this->temperature_sensor_->publish_state(this->system_state.heat_exchanger_temp);
+    }
+  }
+  if (this->voltage_sensor_ != nullptr) {
+    if (this->system_state.voltage != this->voltage_sensor_->state) {
+      this->voltage_sensor_->publish_state(this->system_state.voltage);
+    }
+  }
+  if (this->power_sensor_ != nullptr) {
+    if (this->system_state.heating_power != this->power_sensor_->state) {
+      this->power_sensor_->publish_state(this->system_state.heating_power);
+    }
+  }
+  if (this->mode_sensor_ != nullptr) {
+    if (this->system_state.mode != this->mode_sensor_->state) {
+      this->mode_sensor_->publish_state(this->system_state.mode);
+    }
+  }
+  if (this->alpine_sensor_ != nullptr) {
+    if (this->system_state.alpine != this->alpine_sensor_->state) {
+      this->alpine_sensor_->publish_state(this->system_state.alpine);
+    }
+  }
+  if (this->fan_sensor_ != nullptr) {
+    if (this->system_state.fan != this->fan_sensor_->state) {
+      this->fan_sensor_->publish_state(this->system_state.fan);
+    }
+  }
+  if (this->pump_sensor_ != nullptr) {
+    if (this->system_state.pump != this->pump_sensor_->state) {
+      this->pump_sensor_->publish_state(this->system_state.pump);
+    }
+  }
+  if (this->spark_plug_sensor_ != nullptr) {
+    if (this->system_state.spark_plug != this->spark_plug_sensor_->state) {
+      this->spark_plug_sensor_->publish_state(this->system_state.spark_plug);
+    }
+  }
 }
 
 void DieselHeater::start_data_read() {
@@ -106,11 +146,11 @@ void DieselHeater::on_timer_isr() {
       // Read next bit
       this->toggle_debug_pin(this->debug_pin_1_, 5);
       uint8_t bit = (uint8_t) digitalRead(this->data_pin_->get_pin());
+      current_request[sm_.current_bit_index()] = bit;
       // Store bit if needed (this would be in a buffer)
       sm_.increment_bit_index();
       
       if (sm_.current_bit_index() > sm_.bits_to_read()) {
-        // Done reading request
         sm_.set_state(ReadState::F_REQ_WAIT_END);
         platform_.stop_timer();
         platform_.attach_pin_interrupt(this->data_pin_, true /* rising */);
@@ -128,17 +168,21 @@ void DieselHeater::on_timer_isr() {
       if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_OUTPUT);
       digitalWrite(this->data_pin_->get_pin(), LOW);
       platform_.start_timer(TIME_PERIOD_30ms);
+      // Done reading request
+      handle_request(current_request, current_response, system_state);
       break;
 
     case ReadState::F_RESP_WRITE: {
       // Write response bits
       platform_.start_timer(TIME_PERIOD_4040us);
       uint8_t idx = sm_.current_bit_index();
-      digitalWrite(this->data_pin_->get_pin(), this->idle_response_[idx]);
+      digitalWrite(this->data_pin_->get_pin(), this->current_response[idx]);
       sm_.increment_bit_index();
       if (sm_.current_bit_index() > 48) {
         // Done sending response
         sm_.reset();
+        // sm_.set_state(ReadState::F_REQ_IDLE);
+        this->start_data_read();
         if (this->data_pin_ != nullptr) this->data_pin_->pin_mode(gpio::FLAG_INPUT);
         platform_.stop_timer();
 

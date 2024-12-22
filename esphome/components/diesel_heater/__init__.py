@@ -1,19 +1,21 @@
 from esphome import pins
 import esphome.codegen as cg
+from esphome.components import sensor
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
 DEPENDENCIES = []
 
+
 CONF_DATA_PIN = "data_pin"
 CONF_DEBUG_PIN_1 = "debug_pin_1"
 CONF_DEBUG_PIN_2 = "debug_pin_2"
 
-
 heater_ns = cg.esphome_ns.namespace("diesel_heater")
-DieselHeater = heater_ns.class_("DieselHeater", cg.Component)
+DieselHeater = heater_ns.class_("DieselHeater", sensor.Sensor, cg.Component)
 
 CONF_HEATER_ID = "diesel_heater"
+
 CONFIG_SCHEMA = (
     cv.Schema(
         {

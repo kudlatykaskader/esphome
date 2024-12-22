@@ -1,0 +1,201 @@
+#pragma once
+#include <cinttypes>
+#include <Arduino.h>
+#include "esphome/core/log.h"
+
+namespace esphome {
+namespace diesel_heater {
+
+class SystemState {
+ public:
+  bool on;
+  bool fan;
+  bool spark_plug;
+  bool pump;
+  bool alpine;
+  bool mode;            // represent different mode states, just a boolean toggle for example
+  bool cooling;
+  uint16_t heat_exchanger_temp;  // 0-1023 fits in 10 bits
+  uint8_t voltage;               // 0-63 fits in 6 bits
+  uint8_t heating_power;         // a value representing heating power level (0-63?)
+
+  SystemState(bool on, bool fan, bool spark_plug, bool pump, bool alpine, bool mode, bool shutting_down,
+              uint16_t heat_exchanger_temp, uint8_t voltage, uint8_t heating_power)
+      : on(on), fan(fan), spark_plug(spark_plug), pump(pump), alpine(alpine), mode(mode), cooling(cooling),
+        heat_exchanger_temp(heat_exchanger_temp), voltage(voltage), heating_power(heating_power) {}
+
+  void toggle_on() { on = !on; }
+  void toggle_alpine() { alpine = !alpine; }
+  void toggle_mode() { mode = !mode; }
+
+  void adjust_heating_power_up() {
+    if (heating_power < 5) {
+      heating_power++;
+      ESP_LOGD("", "Heating power: %d", heating_power);
+    }
+  }
+
+  void adjust_heating_power_down() {
+    if (heating_power > 0) {
+      heating_power--;
+      ESP_LOGD("", "Heating power: %d", heating_power);
+    }
+  }
+};
+
+// Encodes a single byte (8 bits) into a 24-bit sequence according to "1 b 0" pattern per bit
+inline void encode_byte(uint8_t data, bool *output24bits) {
+  for (int i = 0; i < 8; i++) {
+    bool bit = (data & (0x80 >> i)) != 0;  // Extract bit i
+    // Encode as 1 bit 0
+    *output24bits++ = true;  // '1'
+    *output24bits++ = bit;   // bit value
+    *output24bits++ = false; // '0'
+  }
+}
+
+// Decode a 24-bit sequence (each 3 bits represent a data bit) into a single byte.
+inline uint8_t decode_byte(const bool *input24bits) {
+  uint8_t result = 0;
+  for (int i = 0; i < 8; i++) {
+    bool bit = input24bits[i * 3 + 1]; // middle bit is the data bit
+    result = (uint8_t)((result << 1) | (bit ? 1 : 0));
+  }
+  return result;
+}
+
+// Encode 16 bits into a 48-bit array
+inline void encode_16bits(uint16_t data, bool *output48bits) {
+  for (int i = 0; i < 16; i++) {
+    bool bit = (data & (1 << (15 - i))) != 0;
+    *output48bits++ = true;    // '1'
+    *output48bits++ = bit;     // data bit
+    *output48bits++ = false;   // '0'
+  }
+}
+
+// Known requests:
+// status (temp)   : 10101111 (0xAF)
+// down            : 10100100 (0xA4)
+// up              : 10100011 (0xA3)
+// alpine toggle   : 10101110 (0xAE)
+// power toggle    : 10100010 (0xA2)
+// mode toggle     : 01110010 (0x72)
+
+// We'll define an enum for these:
+enum class RequestType {
+  UNKNOWN,
+  VOLTAGE,          // 0xAB
+  TEMPERATURE,      // 0xAF
+  PUMP_PRIME,       // 0xAC
+  POWER_DOWN,        // 0xA4
+  POWER_UP,          // 0xA3
+  ALPINE_TOGGLE,     // 0xAE
+  POWER_TOGGLE,      // 0xA2
+  STATUS_IDLE,       // 0xA6
+  // MODE_TOGGLE        // 0x72
+};
+
+inline RequestType identify_request(uint8_t req) {
+  switch (req) {
+
+    // case 0xAF: return RequestType::STATUS_TEMP;
+    case 0xAB: return RequestType::VOLTAGE;
+    case 0xAF: return RequestType::TEMPERATURE;
+    case 0xAC: return RequestType::PUMP_PRIME;
+    case 0xA4: return RequestType::POWER_DOWN;
+    case 0xA3: return RequestType::POWER_UP;
+    case 0xAE: return RequestType::ALPINE_TOGGLE;
+    case 0xA2: return RequestType::POWER_TOGGLE;
+    case 0xA6: return RequestType::STATUS_IDLE;
+    // case 0x72: return RequestType::MODE_TOGGLE;
+    default:   return RequestType::UNKNOWN;
+  }
+}
+
+struct Response {
+  uint16_t data; 
+  uint8_t bit_length; // always 16 for now
+  Response(uint16_t d, uint8_t len = 16) : data(d), bit_length(len) {}
+};
+
+inline Response generate_response(RequestType req_type, const SystemState &state, uint8_t request_data) {
+  if (req_type == RequestType::STATUS_IDLE 
+      || req_type == RequestType::POWER_TOGGLE 
+      || req_type == RequestType::POWER_DOWN 
+      || req_type == RequestType::POWER_UP
+      || req_type == RequestType::ALPINE_TOGGLE
+      || req_type == RequestType::PUMP_PRIME) {
+    uint16_t response = 0b0110000000000000;
+
+    if (!state.on) {
+      return Response(response | (state.voltage & 0x3F));
+    } else {
+      response |= state.heating_power & 0b001;
+      response |= state.heating_power & 0b010 << 1;
+      response |= state.heating_power & 0b100 << 2;
+      response |= (state.mode ? 1 : 0)        << 5;
+      response |= (state.on ? 1 : 0)          << 6;
+      response |= (state.cooling ? 1 : 0)     << 7;
+      response |= (state.spark_plug ? 1 : 0)  << 8;
+      response |= (state.alpine ? 1 : 0)      << 9;
+      response |= (state.pump ? 1 : 0)        << 10;
+      response |= (state.fan ? 1 : 0)         << 11;
+      return Response(response);
+    }
+  } else if (req_type == RequestType::VOLTAGE) {
+    return Response(0b1010000000000000 | (state.voltage & 0x3F));
+  } else if (req_type == RequestType::TEMPERATURE) {
+    // return Response(0b100000000000000 | (400 & 0x3F);
+    return Response(0b0100001111011111);
+  } else {
+    // Unknown request, return 0
+    return Response(0);
+  }
+}
+
+// Given the 24-bit request read from wire, decode and handle it:
+inline void handle_request(const bool *request24bits, bool *response48bits, SystemState &state) {
+  uint8_t request_data = decode_byte(request24bits);
+  RequestType req_type = identify_request(request_data);
+
+  // React to incoming messages by changing system state if needed
+  switch (req_type) {
+    case RequestType::POWER_TOGGLE:
+      state.toggle_on();
+      break;
+    case RequestType::POWER_DOWN:
+      state.adjust_heating_power_down();
+      break;
+    case RequestType::POWER_UP:
+      state.adjust_heating_power_up();
+      break;
+    case RequestType::ALPINE_TOGGLE:
+      state.toggle_alpine();
+      break;
+    case RequestType::PUMP_PRIME:
+      state.pump = true;
+      ESP_LOGD("", "Pump primed");
+      break;
+    case RequestType::UNKNOWN:
+    default:
+      // No state change
+      break;
+  }
+
+  // Now generate a response based on the new state and request
+  Response resp = generate_response(req_type, state, request_data);
+
+  // Encode the 16-bit response into 48 bits
+  encode_16bits(resp.data, response48bits);
+
+  // ESP_LOGD("", "Response bits: %i", resp.data & 0b0000000000001111);
+  
+
+  // ESP_LOGD("", "Syste State: %d %d %d %d %d %d %d %d %d %d", state.on, state.fan, state.spark_plug, state.pump, state.alpine, state.mode, state.cooling, state.heat_exchanger_temp, state.voltage, state.heating_power);
+  ESP_LOGD("", "Request: 0x%02X, Response: 0x%04X", request_data, resp.data);
+
+}
+
+}  // namespace diesel_heater
+}  // namespace esphome
