@@ -88,10 +88,10 @@ inline Response generate_response(RequestType req_type, const SystemState &state
     if (!state.on) {
       return Response(response | (state.voltage & 0x3F));
     } else {
-      response |= state.heating_power & 0b001;
-      response |= state.heating_power & 0b010 << 1;
-      response |= state.heating_power & 0b100 << 2;
-      response |= (state.mode ? 1 : 0)        << 5;
+      // response |= state.heating_power & 0b001;
+      // response |= state.heating_power & 0b010 << 1;
+      // response |= state.heating_power & 0b100 << 2;
+      // response |= (state.mode ? 1 : 0)        << 5;
       response |= (state.on ? 1 : 0)          << 6;
       response |= (state.cooling ? 1 : 0)     << 7;
       response |= (state.spark_plug ? 1 : 0)  << 8;
@@ -132,7 +132,6 @@ inline void handle_request(const bool *request24bits, bool *response48bits, Syst
       break;
     case RequestType::PUMP_PRIME:
       state.pump = true;
-      ESP_LOGD("", "Pump primed");
       break;
     case RequestType::MODE_TOGGLE:
       state.toggle_mode();
@@ -151,7 +150,7 @@ inline void handle_request(const bool *request24bits, bool *response48bits, Syst
   // ESP_LOGD("", "Response bits: %i", resp.data & 0b0000000000001111);
   
 
-  // ESP_LOGD("", "Syste State: %d %d %d %d %d %d %d %d %d %d", state.on, state.fan, state.spark_plug, state.pump, state.alpine, state.mode, state.cooling, state.heat_exchanger_temp, state.voltage, state.heating_power);
+  ESP_LOGD("", "Syste State: O:%d F:%d S:%d P:%d A:%d M:%d C:%d H:%d V:%d PR:%d", state.on, state.fan, state.spark_plug, state.pump, state.alpine, state.mode, state.cooling, state.heat_exchanger_temp, state.voltage, state.heating_power);
   ESP_LOGD("", "Request: 0x%02X, Response: 0x%04X", request_data, resp.data);
 
 }

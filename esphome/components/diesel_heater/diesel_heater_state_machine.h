@@ -4,12 +4,6 @@
 namespace esphome {
 namespace diesel_heater {
 
-enum class OperatingMode {
-  MODE_SHARED, // Heater connected to original controller, we read heater responses and write commands when needed
-  MODE_EXCLUSIVE, // There is no original controller, we control the heater directly, sending all requests and reading responses
-  MODE_SIMULATION // We simulate the heater by reading commands from a controller and sending (dummy) responses too see how the controller reacts
-};
-
 enum class ReadState {
   F_REQ_IDLE,         // Waiting for falling edge then 30ms low
   

@@ -4,11 +4,11 @@ namespace esphome {
 namespace diesel_heater {
 
 void PowerUpButton::press_action() {
-  this->parent_->increase_power();
+  this->parent_->set_power_up_button_clicked();
 }
 
 void PowerDownButton::press_action() {
-  this->parent_->decrease_power();
+  this->parent_->set_power_down_button_clicked();
 }
 
 }  // namespace diesel_heater

@@ -14,15 +14,36 @@
 namespace esphome {
 namespace diesel_heater {
 
+enum class Mode {
+  ADAPTER, // Heater connected to original controller, we read heater responses and write commands when needed
+  SIMULATOR // We simulate the heater by reading commands from a controller and sending (dummy) responses too see how the controller reacts
+};
+
 class DieselHeater : public Component {
  public:
+  // built in methods
   void setup() override;
   void loop() override;
   void dump_config() override;
 
+  // configuration: pins
+  InternalGPIOPin *data_pin_{nullptr};
+  InternalGPIOPin *debug_pin_1_{nullptr};
+  InternalGPIOPin *debug_pin_2_{nullptr};
+  
   void set_data_pin(InternalGPIOPin *data_pin) { data_pin_ = data_pin; }
   void set_debug_pin_1(InternalGPIOPin *debug_pin) { debug_pin_1_ = debug_pin; }
   void set_debug_pin_2(InternalGPIOPin *debug_pin) { debug_pin_2_ = debug_pin; }
+
+  // configuration: sensors
+  sensor::Sensor *temperature_sensor_{nullptr};
+  sensor::Sensor *voltage_sensor_{nullptr};
+  sensor::Sensor *power_sensor_{nullptr};
+  sensor::Sensor *mode_sensor_{nullptr};
+  sensor::Sensor *alpine_sensor_{nullptr};
+  sensor::Sensor *fan_sensor_{nullptr};
+  sensor::Sensor *pump_sensor_{nullptr};
+  sensor::Sensor *spark_plug_sensor_{nullptr};
 
   void set_temperature_sensor(sensor::Sensor *temperature_sensor) { temperature_sensor_ = temperature_sensor; };
   void set_voltage_sensor(sensor::Sensor *voltage_sensor) { voltage_sensor_ = voltage_sensor; };
@@ -32,50 +53,29 @@ class DieselHeater : public Component {
   void set_fan_sensor(sensor::Sensor *fan_sensor) { fan_sensor_ = fan_sensor; };
   void set_pump_sensor(sensor::Sensor *pump_sensor) { pump_sensor_ = pump_sensor; };
   void set_spark_plug_sensor(sensor::Sensor *spark_plug_sensor) { spark_plug_sensor_ = spark_plug_sensor; };
-  void set_power_switch(switch_::Switch *sw) { power_switch_ = sw; }
-  void set_alpine_switch(switch_::Switch *sw) { alpine_switch_ = sw; }
-  void set_mode_switch(switch_::Switch *sw) { mode_switch_ = sw; }
-  void set_power_up_button(button::Button *button) { power_up_button_ = button; }
-  void set_power_down_button(button::Button *button) { power_down_button_ = button; }
 
-  // bool get_power_switch() { return this->system_state.on; }
-  // void set_power_switch(bool state) { this->system_state.on = state; }
-  bool set_power_switch_state(bool state) { 
-    if (this->system_state.on != state) {
-      this->system_state.on = state;
-      this->request_queue_.push(RequestType::POWER_TOGGLE);
-      return true;
-    }
-    return false;
-  }
-
-  bool set_mode_switch_state(bool state) { 
-    if (this->system_state.mode != state) {
-      this->system_state.mode = state;
-      // this->request_queue_.push(RequestType::MODE_TOGGLE);
-      return true;
-    }
-    return false;
-  }
-
-  bool set_alpine_switch_state(bool state) { 
-    if (this->system_state.alpine != state) {
-      this->system_state.alpine = state;
-      this->request_queue_.push(RequestType::ALPINE_TOGGLE);
-      return true;
-    }
-    return false;
-  }
-
-  void increase_power() { 
-    this->system_state.adjust_heating_power_up();
-    this->request_queue_.push(RequestType::POWER_UP);
-  }
+  // configuration: switches
   
-  void decrease_power() {
-    this->system_state.adjust_heating_power_down();
-    this->request_queue_.push(RequestType::POWER_DOWN);
-  }
+  switch_::Switch *power_switch_{nullptr};
+  switch_::Switch *alpine_switch_{nullptr};
+  switch_::Switch *mode_switch_{nullptr};
+
+  void set_power_switch(switch_::Switch *sw) { power_switch_ = sw; }
+  bool set_power_switch_state(bool state);
+  void set_alpine_switch(switch_::Switch *sw) { alpine_switch_ = sw; }
+  bool set_alpine_switch_state(bool state); 
+  void set_mode_switch(switch_::Switch *sw) { mode_switch_ = sw; }
+  bool set_mode_switch_state(bool state);
+
+
+  // configuration: buttons
+  button::Button *power_up_button_{nullptr};
+  button::Button *power_down_button_{nullptr};
+
+  void set_power_up_button(button::Button *button) { power_up_button_ = button; }
+  void set_power_up_button_clicked();
+  void set_power_down_button(button::Button *button) { power_down_button_ = button; }
+  void set_power_down_button_clicked();
 
   static DieselHeater *instance_;
 
@@ -83,12 +83,12 @@ class DieselHeater : public Component {
   void IRAM_ATTR on_pin_isr();
   void IRAM_ATTR on_timer_isr();
 
- protected:
-  InternalGPIOPin *data_pin_{nullptr};
-  InternalGPIOPin *debug_pin_1_{nullptr};
-  InternalGPIOPin *debug_pin_2_{nullptr};
+  void set_mode(Mode mode) {
+    this->op_mode_ = mode;
+  }
 
-  OperatingMode op_mode_{OperatingMode::MODE_SHARED};
+ protected:
+  Mode op_mode_;
 
   // State machine instance
   StateMachine sm_;
@@ -107,32 +107,17 @@ class DieselHeater : public Component {
   void start_data_read(uint8_t bits);
   void toggle_debug_pin(InternalGPIOPin *pin, uint32_t delay);
 
-  void handle_reading_state();
-  void handle_response_state();
-
-  void decode_raw_request(); // future decoding logic
-
-  sensor::Sensor *temperature_sensor_{nullptr};
-  sensor::Sensor *voltage_sensor_{nullptr};
-  sensor::Sensor *power_sensor_{nullptr};
-  sensor::Sensor *mode_sensor_{nullptr};
-  sensor::Sensor *alpine_sensor_{nullptr};
-  sensor::Sensor *fan_sensor_{nullptr};
-  sensor::Sensor *pump_sensor_{nullptr};
-  sensor::Sensor *spark_plug_sensor_{nullptr};
-
-  switch_::Switch *power_switch_{nullptr};
-  switch_::Switch *alpine_switch_{nullptr};
-  switch_::Switch *mode_switch_{nullptr};
-
-  button::Button *power_up_button_{nullptr};
-  button::Button *power_down_button_{nullptr};
-
   // update internal in milliseconds
   uint32_t update_interval_{5 * 1000};
   uint32_t last_update_{0};
 
   // create a command queue for handling requests
+  bool do_update_entities_ = false;
+  void update_entities();
+
+  void on_request_received();
+  void on_response_received();
+
   std::queue<RequestType> request_queue_;
 };
 

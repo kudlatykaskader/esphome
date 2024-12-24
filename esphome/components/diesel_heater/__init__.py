@@ -10,11 +10,18 @@ DEPENDENCIES = []
 CONF_DATA_PIN = "data_pin"
 CONF_DEBUG_PIN_1 = "debug_pin_1"
 CONF_DEBUG_PIN_2 = "debug_pin_2"
+CONF_MODE = "mode"
 
 heater_ns = cg.esphome_ns.namespace("diesel_heater")
 DieselHeater = heater_ns.class_("DieselHeater", sensor.Sensor, cg.Component)
 
 CONF_HEATER_ID = "diesel_heater"
+
+Mode = heater_ns.enum("Mode", True)
+MODE = {
+    "ADAPTER": Mode.ADAPTER,
+    "SIMULATOR": Mode.SIMULATOR,
+}
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -23,6 +30,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_DATA_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_DEBUG_PIN_1): pins.gpio_output_pin_schema,
             cv.Optional(CONF_DEBUG_PIN_2): pins.gpio_output_pin_schema,
+            cv.Optional(CONF_MODE): cv.enum(MODE, upper=True, space="_"),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -41,3 +49,5 @@ async def to_code(config):
     if CONF_DEBUG_PIN_2 in config:
         debug_pin_2_ = await cg.gpio_pin_expression(config[CONF_DEBUG_PIN_2])
         cg.add(var.set_debug_pin_2(debug_pin_2_))
+    if CONF_MODE in config:
+        cg.add(var.set_mode(config[CONF_MODE]))
