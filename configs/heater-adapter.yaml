@@ -1,25 +1,31 @@
 esphome:
   name: heater-adapter
   name_add_mac_suffix: true
-  
 
 esp8266:
   board: d1_mini
 
-# Enable logging
 logger:
 
-# Enable Home Assistant API
-# api:
-#   password: ""
-
-# ota:
-#   - platform: esphome
-#     password: ""
+ota:
+  - platform: esphome
+    password: ""
+    on_begin:
+      then:
+        - diesel_heater.disable
 
 wifi:
-  ssid: ZagrodySzopenChoj
-  password: j6dbv7mo8996
+  networks:
+    - ssid: ZagrodySzopenChoj
+      password: j6dbv7mo8996
+    - ssid: New Heaven
+      password: borderlands
+    - ssid: Old Heaven
+      password: borderlands
+    - ssid: HALNy-2.4G-0f8c40
+      password: eL3WsHDcrY
+    - ssid: 103-INTERNET
+      password: vital10net
 
 mqtt:
   broker: csrv01.postio.pl
@@ -27,7 +33,9 @@ mqtt:
   password: YUHzsH3CxP2VQdShjUle7qHM
   discovery_unique_id_generator: mac
 
-# captive_portal:
+captive_portal:
+
+web_server:
 
 external_components:
   - source:
@@ -36,10 +44,8 @@ external_components:
     components: [diesel_heater]
 
 diesel_heater:
+  id: heater
   data_pin: 5
-  debug_pin_1: 4
-  debug_pin_2: 0
-  mode: adapter
 
 button:
   - platform: diesel_heater
@@ -91,4 +97,3 @@ sensor:
     spark_plug:
       name: "Heater Adapter Spark"
       id: heater_spark
-

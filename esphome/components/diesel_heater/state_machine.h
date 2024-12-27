@@ -30,11 +30,11 @@ class StateMachine {
  public:
   StateMachine() = default;
   
-  void reset();
+  void reset(ReadState rs = ReadState::F_REQ_WAIT_F_EDGE);
   
   ReadState current_state() const { return current_state_; }
   void set_state(ReadState state) { current_state_ = state; }
-  
+
   void on_falling_edge_detected(uint32_t now);
   bool on_rising_edge_detected(uint32_t now);
   

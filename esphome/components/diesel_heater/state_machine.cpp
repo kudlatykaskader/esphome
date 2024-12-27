@@ -1,21 +1,14 @@
-#include "diesel_heater_state_machine.h"
+#include "state_machine.h"
 #include <Arduino.h>
 
 namespace esphome {
 namespace diesel_heater {
 
-void StateMachine::reset() {
-  current_state_ = ReadState::F_REQ_IDLE;
+void StateMachine::reset(ReadState rs) {
+  current_state_ = rs;
   bits_to_read_ = 0;
   current_bit_index_ = 0;
   time_frame_prefix_started_ = 0;
-}
-
-void StateMachine::on_falling_edge_detected(uint32_t now) {
-  if (current_state_ == ReadState::F_REQ_WAIT_F_EDGE) {
-    time_frame_prefix_started_ = now;
-    current_state_ = ReadState::F_REQ_WAIT_R_EDGE;
-  }
 }
 
 bool StateMachine::on_rising_edge_detected(uint32_t now) {
