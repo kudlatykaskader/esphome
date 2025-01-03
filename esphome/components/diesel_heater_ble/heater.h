@@ -63,11 +63,18 @@ class DieselHeaterBLE : public Component, public ble_client::BLEClientNode {
   void set_temp_unit(sensor::Sensor *sensor) { temp_unit_ = sensor; }
   void set_altitude_unit(sensor::Sensor *sensor) { altitude_unit_ = sensor; }
   void set_automatic_heating(sensor::Sensor *sensor) { automatic_heating_ = sensor; }
-
+ 
+  // Number setters
   void set_power_level_number(number::Number *number) { power_level_number_ = number; }
+  void set_power_level_action(float value);
+  
   void set_set_temp_number(number::Number *number) { set_temp_number_ = number; }
+  void set_temp_number_action(float value);
 
+  // Switch setter
   void set_power_switch(switch_::Switch *sw) { power_switch_ = sw; }
+  void set_power_switch_action(bool state);
+
 
   HeaterState get_state() {
     return this->state_;

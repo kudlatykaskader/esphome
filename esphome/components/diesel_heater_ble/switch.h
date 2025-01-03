@@ -14,8 +14,7 @@ class PowerSwitch : public switch_::Switch, public Parented<DieselHeaterBLE> {
 
  protected:
   void write_state(bool state) override {
-    ESP_LOGD("diesel_heater_ble", "Setting power state to: %d", state);
-    this->parent_->sent_request(SetPowerRequest(state).toBytes());
+    this->parent_->set_power_switch_action(state);
   }
 };
 

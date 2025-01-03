@@ -4,7 +4,6 @@
 #include "esphome/core/component.h"
 
 #include "heater.h"
-#include "messages.h"
 
 namespace esphome {
 namespace diesel_heater_ble {
@@ -15,11 +14,8 @@ class PowerLevelNumber : public number::Number, public Parented<DieselHeaterBLE>
   
   protected:
   void control(float value) override {
-    if (this->parent_->get_state().runningmode == 2) {
-      this->parent_->sent_request(SetRunningModeRequest(1).toBytes());
+    this->parent_->set_power_level_action(value);
     }
-    this->parent_->sent_request(SetLevelRequest(value + 1).toBytes());
-  }
 };
 
 class SetTempNumber : public number::Number, public Parented<DieselHeaterBLE> {
@@ -28,10 +24,7 @@ class SetTempNumber : public number::Number, public Parented<DieselHeaterBLE> {
   
   protected:
   void control(float value) override {
-    if (this->parent_->get_state().runningmode == 1) {
-      this->parent_->sent_request(SetRunningModeRequest(2).toBytes());
-    }
-    this->parent_->sent_request(SetTemperatureRequest(value).toBytes());
+    this->parent_->set_temp_number_action(value);
   }
 };
 

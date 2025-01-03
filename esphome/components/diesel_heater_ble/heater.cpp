@@ -70,7 +70,6 @@ bool DieselHeaterBLE::ble_write_chr(esp_gatt_if_t gattc_if, esp_bd_addr_t remote
     ESP_LOGD(TAG, "Write characteristic failed, status: %d", ret);
     return false;
   } else {
-    ESP_LOGD(TAG, "Write characteristic success: %s", format_hex_pretty(std::vector<uint8_t>(data, data + len)).c_str());
   }
   return true;
 }
@@ -179,10 +178,10 @@ void DieselHeaterBLE::update_sensors(const HeaterState &new_state) {
     is_auto_->publish_state(new_state.isauto);
     return;
   }
-  // if (language_ != nullptr && language_->state != new_state.language) {
-  //   language_->publish_state(new_state.language);
-  //   return;
-  // }
+  if (language_ != nullptr && language_->state != new_state.language) {
+    language_->publish_state(new_state.language);
+    return;
+  }
   if (temp_offset_ != nullptr && temp_offset_->state != new_state.tempoffset) {
     temp_offset_->publish_state(new_state.tempoffset);
     return;
@@ -211,6 +210,24 @@ void DieselHeaterBLE::update_sensors(const HeaterState &new_state) {
     automatic_heating_->publish_state(new_state.automaticheating);
     return;
   }
+}
+
+void DieselHeaterBLE::set_power_level_action(float value) {
+  if (this->get_state().runningmode == 2) {
+    this->sent_request(SetRunningModeRequest(1).toBytes());
+  }
+  this->sent_request(SetLevelRequest(value + 1).toBytes());
+}
+  
+void DieselHeaterBLE::set_temp_number_action(float value) {
+  if (this->get_state().runningmode == 1) {
+    this->sent_request(SetRunningModeRequest(2).toBytes());
+  }
+  this->sent_request(SetTemperatureRequest(value).toBytes());
+}
+
+void DieselHeaterBLE::set_power_switch_action(bool state) {
+  this->sent_request(SetPowerRequest(state).toBytes());
 }
 
 }  // namespace diesel_heater_ble
