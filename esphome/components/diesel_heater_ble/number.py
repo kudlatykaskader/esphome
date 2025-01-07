@@ -1,11 +1,8 @@
 import esphome.codegen as cg
-import esphome.config_validation as cv
 from esphome.components import number
-from esphome.const import (
-    CONF_TEMPERATURE
-)
+import esphome.config_validation as cv
 
-from . import DieselHeaterBLE, CONF_HEATER_ID, diesel_heater_ble_ns
+from . import CONF_HEATER_ID, DieselHeaterBLE, diesel_heater_ble_ns
 
 CODEOWNERS = ["@warehog"]
 DEPENDENCIES = ["diesel_heater_ble"]
@@ -17,16 +14,14 @@ PowerLevelNumber = diesel_heater_ble_ns.class_("PowerLevelNumber", number.Number
 CONF_SET_TEMP = "set_temp"
 SetTempNumber = diesel_heater_ble_ns.class_("SetTempNumber", number.Number)
 
-CONFIG_SCHEMA = (
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_HEATER_ID): cv.use_id(DieselHeaterBLE),
-            cv.Optional(CONF_POWER_LEVEL): number.number_schema(PowerLevelNumber),
-            cv.Optional(CONF_SET_TEMP): number.number_schema(SetTempNumber),
-        }
-    )
-    .extend(cv.COMPONENT_SCHEMA)
-)
+CONFIG_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(CONF_HEATER_ID): cv.use_id(DieselHeaterBLE),
+        cv.Optional(CONF_POWER_LEVEL): number.number_schema(PowerLevelNumber),
+        cv.Optional(CONF_SET_TEMP): number.number_schema(SetTempNumber),
+    }
+).extend(cv.COMPONENT_SCHEMA)
+
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_HEATER_ID])
