@@ -33,19 +33,15 @@ public:
     }
 
     static HeaterClass detect_heater_class(const std::vector<uint8_t> &raw) {
-        if(raw[0] == 0xAA) {
-            return raw[1] == 0x55 ? HeaterClass::HEATER_AA_55 : HeaterClass::HEATER_AA_66;
-        } else if (raw[0] == 0xDA) {
-            std::vector<uint8_t> decrypted = ResponseParser::decrypt(raw);
-            if (decrypted[1] == 0x55) {
+        switch (raw[1]) {
+            case 0x55:
+                return HeaterClass::HEATER_AA_55;
+            case 0x66:
+                return HeaterClass::HEATER_AA_66;
+            case 0x07:
                 return HeaterClass::HEATER_AA_55_ENCRYPTED;
-            } else if (decrypted[1] == 0x66) {
-                return HeaterClass::HEATER_AA_66_ENCRYPTED;
-            } else {
+            default:
                 return HeaterClass::HEATER_CLASS_UNKNOWN;
-            }
-        } else {
-            return HeaterClass::HEATER_CLASS_UNKNOWN;
         }
     }
 

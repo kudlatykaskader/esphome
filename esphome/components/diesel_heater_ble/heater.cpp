@@ -100,6 +100,14 @@ bool DieselHeaterBLE::ble_register_for_notify(esp_gatt_if_t gattc_if, esp_bd_add
 
 void DieselHeaterBLE::on_notification_received(const std::vector<uint8_t> &data) {
   // ESP_LOGD(TAG, "Notification received: %s", format_hex_pretty(data).c_str());
+  if (this->controller_ == nullptr) {
+    this->controller_ = ControllerSelector::get_controller(ResponseParser::detect_heater_class(data));
+    if (this->controller_ == nullptr) {
+      ESP_LOGD(TAG, "Failed to get controller.");
+      return;
+    }
+  }
+
   bool ret = ResponseParser::parse(data, this->state_);
   if (!ret) {
     ESP_LOGD(TAG, "Failed to parse response.");
@@ -212,22 +220,46 @@ void DieselHeaterBLE::update_sensors(const HeaterState &new_state) {
   }
 }
 
-void DieselHeaterBLE::set_power_level_action(float value) {
-  if (this->get_state().runningmode == 2) {
-    this->sent_request(SetRunningModeRequest(1).toBytes());
-  }
-  this->sent_request(SetLevelRequest(value + 1).toBytes());
+void DieselHeaterBLE::on_power_level_number(float value) {
+  this->sent_requests(
+      this->controller_->gen_level_command(this->state_, value)
+  );
 }
   
-void DieselHeaterBLE::set_temp_number_action(float value) {
-  if (this->get_state().runningmode == 1) {
-    this->sent_request(SetRunningModeRequest(2).toBytes());
-  }
-  this->sent_request(SetTemperatureRequest(value).toBytes());
+void DieselHeaterBLE::on_temp_number(float value) {
+  this->sent_requests(
+      this->controller_->gen_temp_command(this->state_, value)
+  );
 }
 
-void DieselHeaterBLE::set_power_switch_action(bool state) {
-  this->sent_request(SetPowerRequest(state).toBytes());
+void DieselHeaterBLE::on_power_switch(bool state) {
+  this->sent_requests(
+      this->controller_->gen_power_command(this->state_, state)
+  );
+}
+
+void DieselHeaterBLE::on_level_up_button_press() {
+  this->sent_requests(
+      this->controller_->gen_level_up_command(this->state_)
+  );
+}
+
+void DieselHeaterBLE::on_level_down_button_press() {
+  this->sent_requests(
+      this->controller_->gen_level_down_command(this->state_)
+  );
+}
+
+void DieselHeaterBLE::on_temp_up_button_press() {
+  this->sent_requests(
+      this->controller_->gen_temp_up_command(this->state_)
+  );
+}
+
+void DieselHeaterBLE::on_temp_down_button_press() {
+  this->sent_requests(
+      this->controller_->gen_temp_down_command(this->state_)
+  );
 }
 
 }  // namespace diesel_heater_ble

@@ -10,11 +10,13 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/switch/switch.h"
+#include "esphome/components/button/button.h"
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
 
 #include "messages.h"
 #include "state.h"
+#include "controllers.h"
 
 namespace esphome {
 namespace diesel_heater_ble {
@@ -31,6 +33,12 @@ class DieselHeaterBLE : public Component, public ble_client::BLEClientNode {
   void sent_request(const std::vector<uint8_t> &data) {
     std::vector<uint8_t> data_(data);
     this->ble_write_chr(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(), this->handle_, data_.data(), data.size());
+  }
+
+  void sent_requests(const std::vector<Request> &requests) {
+    for (const auto &request : requests) {
+      this->sent_request(request.toBytes());
+    }
   }
 
   bool ble_write_chr(esp_gatt_if_t gattc_if, esp_bd_addr_t remote_bda, uint16_t handle, uint8_t *data, uint16_t len);
@@ -63,17 +71,28 @@ class DieselHeaterBLE : public Component, public ble_client::BLEClientNode {
   void set_temp_unit(sensor::Sensor *sensor) { temp_unit_ = sensor; }
   void set_altitude_unit(sensor::Sensor *sensor) { altitude_unit_ = sensor; }
   void set_automatic_heating(sensor::Sensor *sensor) { automatic_heating_ = sensor; }
- 
+  
+  // Button setters
+  void set_level_up_button(button::Button *button) { level_up_button_ = button; }
+  void set_level_down_button(button::Button *button) { level_down_button_ = button; }
+  void set_temp_up_button(button::Button *button) { temp_up_button_ = button; }
+  void set_temp_down_button(button::Button *button) { temp_down_button_ = button; }
+  
+  void on_level_up_button_press();
+  void on_level_down_button_press();
+  void on_temp_up_button_press();
+  void on_temp_down_button_press();
+
   // Number setters
   void set_power_level_number(number::Number *number) { power_level_number_ = number; }
-  void set_power_level_action(float value);
+  void on_power_level_number(float value);
   
   void set_set_temp_number(number::Number *number) { set_temp_number_ = number; }
-  void set_temp_number_action(float value);
+  void on_temp_number(float value);
 
   // Switch setter
   void set_power_switch(switch_::Switch *sw) { power_switch_ = sw; }
-  void set_power_switch_action(bool state);
+  void on_power_switch(bool state);
 
 
   HeaterState get_state() {
@@ -86,6 +105,7 @@ class DieselHeaterBLE : public Component, public ble_client::BLEClientNode {
   esp32_ble_tracker::ESPBTUUID characteristic_uuid_ = esp32_ble_tracker::ESPBTUUID::from_raw("0000ffe1-0000-1000-8000-00805f9b34fb");
 
   HeaterState state_;
+  HeaterController *controller_{};
   
   bool response_received_{false};
   uint32_t last_request_{0};
@@ -114,6 +134,11 @@ class DieselHeaterBLE : public Component, public ble_client::BLEClientNode {
   sensor::Sensor *temp_unit_{};
   sensor::Sensor *altitude_unit_{};
   sensor::Sensor *automatic_heating_{};
+
+  button::Button *level_up_button_{};
+  button::Button *level_down_button_{};
+  button::Button *temp_up_button_{};
+  button::Button *temp_down_button_{};
 
   number::Number *power_level_number_{};
   number::Number *set_temp_number_{};

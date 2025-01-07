@@ -14,7 +14,7 @@ class PowerLevelNumber : public number::Number, public Parented<DieselHeaterBLE>
   
   protected:
   void control(float value) override {
-    this->parent_->set_power_level_action(value);
+    this->parent_->on_power_level_number(value);
     }
 };
 
@@ -24,7 +24,7 @@ class SetTempNumber : public number::Number, public Parented<DieselHeaterBLE> {
   
   protected:
   void control(float value) override {
-    this->parent_->set_temp_number_action(value);
+    this->parent_->on_temp_number(value);
   }
 };
 

@@ -14,7 +14,7 @@ class PowerSwitch : public switch_::Switch, public Parented<DieselHeaterBLE> {
 
  protected:
   void write_state(bool state) override {
-    this->parent_->set_power_switch_action(state);
+    this->parent_->on_power_switch(state);
   }
 };
 
