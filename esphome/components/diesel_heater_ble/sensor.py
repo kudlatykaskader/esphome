@@ -2,6 +2,8 @@ import esphome.codegen as cg
 from esphome.components import ble_client, sensor
 import esphome.config_validation as cv
 from esphome.const import (
+    CONF_ALTITUDE,
+    CONF_SUPPLY_VOLTAGE,
     DEVICE_CLASS_EMPTY,
     DEVICE_CLASS_TEMPERATURE,
     STATE_CLASS_MEASUREMENT,
@@ -12,7 +14,7 @@ from esphome.const import (
     UNIT_VOLT,
 )
 
-from . import CONF_HEATER_ID, DieselHeaterBLE
+from . import CONF_DIESEL_HEATER_BLE, DieselHeaterBLE
 
 CODEOWNERS = ["@warehog"]
 DEPENDENCIES = ["diesel_heater_ble"]
@@ -22,11 +24,9 @@ AUTO_LOAD = ["sensor"]
 CONF_RUNNING_STATE = "running_state"
 CONF_ERROR_CODE = "error_code"
 CONF_RUNNING_STEP = "running_step"
-CONF_ALTITUDE = "altitude"
 CONF_RUNNING_MODE = "running_mode"
 CONF_SET_LEVEL = "set_level"
 CONF_SET_TEMP = "set_temp"
-CONF_SUPPLY_VOLTAGE = "supply_voltage"
 CONF_CASE_TEMP = "case_temp"
 CONF_CAB_TEMP = "cab_temp"
 CONF_START_TIME = "start_time"
@@ -44,7 +44,7 @@ CONF_AUTOMATIC_HEATING = "automatic_heating"
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(CONF_HEATER_ID): cv.use_id(DieselHeaterBLE),
+        cv.GenerateID(CONF_DIESEL_HEATER_BLE): cv.use_id(DieselHeaterBLE),
         cv.Optional(CONF_RUNNING_STATE): sensor.sensor_schema(
             unit_of_measurement=UNIT_EMPTY,
             accuracy_decimals=1,
@@ -182,7 +182,7 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-    var = await cg.get_variable(config[CONF_HEATER_ID])
+    var = await cg.get_variable(config[CONF_DIESEL_HEATER_BLE])
 
     for sensor_name in [
         CONF_RUNNING_STATE,

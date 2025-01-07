@@ -6,7 +6,7 @@ from esphome.const import CONF_ID
 CODEOWNERS = ["@warehog"]
 DEPENDENCIES = ["ble_client"]
 
-CONF_HEATER_ID = "diesel_heater_ble"
+CONF_DIESEL_HEATER_BLE = "diesel_heater_ble"
 
 diesel_heater_ble_ns = cg.esphome_ns.namespace("diesel_heater_ble")
 DieselHeaterBLE = diesel_heater_ble_ns.class_(

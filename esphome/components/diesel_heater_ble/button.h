@@ -13,9 +13,7 @@ class LevelUpButton : public button::Button, public Parented<DieselHeaterBLE> {
   LevelUpButton() = default;
 
  protected:
-  void press_action() override {
-    this->parent_->on_level_up_button_press();
-  }
+  void press_action() override { this->parent_->on_level_up_button_press(); }
 };
 
 class LevelDownButton : public button::Button, public Parented<DieselHeaterBLE> {
@@ -23,9 +21,7 @@ class LevelDownButton : public button::Button, public Parented<DieselHeaterBLE> 
   LevelDownButton() = default;
 
  protected:
-  void press_action() override {
-    this->parent_->on_level_down_button_press();
-  }
+  void press_action() override { this->parent_->on_level_down_button_press(); }
 };
 
 class TempUpButton : public button::Button, public Parented<DieselHeaterBLE> {
@@ -33,9 +29,7 @@ class TempUpButton : public button::Button, public Parented<DieselHeaterBLE> {
   TempUpButton() = default;
 
  protected:
-  void press_action() override {
-    this->parent_->on_temp_up_button_press();
-  }
+  void press_action() override { this->parent_->on_temp_up_button_press(); }
 };
 
 class TempDownButton : public button::Button, public Parented<DieselHeaterBLE> {
@@ -43,11 +37,8 @@ class TempDownButton : public button::Button, public Parented<DieselHeaterBLE> {
   TempDownButton() = default;
 
  protected:
-  void press_action() override {
-    this->parent_->on_temp_down_button_press();
-  }
+  void press_action() override { this->parent_->on_temp_down_button_press(); }
 };
 
-
-}  // namespace diesel_heater
+}  // namespace diesel_heater_ble
 }  // namespace esphome

@@ -13,10 +13,8 @@ class PowerSwitch : public switch_::Switch, public Parented<DieselHeaterBLE> {
   PowerSwitch() = default;
 
  protected:
-  void write_state(bool state) override {
-    this->parent_->on_power_switch(state);
-  }
+  void write_state(bool state) override { this->parent_->on_power_switch(state); }
 };
 
-}  // namespace diesel_heater
+}  // namespace diesel_heater_ble
 }  // namespace esphome

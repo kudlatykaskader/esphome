@@ -12,13 +12,15 @@ void DieselHeaterBLE::loop() {
     if (this->last_request_ + 1000 < millis()) {
       this->last_request_ = millis();
       uint8_t data[8] = {0xaa, 0x55, 0x0c, 0x22, 0x01, 0x00, 0x00, 0x2f};
-      this->ble_write_chr(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(), this->handle_, data, sizeof(data));
+      this->ble_write_chr(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(), this->handle_, data,
+                          sizeof(data));
     }
     this->update_sensors(this->state_);
   }
 }
 
-void DieselHeaterBLE::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param) {
+void DieselHeaterBLE::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                                          esp_ble_gattc_cb_param_t *param) {
   switch (event) {
     case ESP_GATTC_OPEN_EVT:
       ESP_LOGD(TAG, "GATT client opened.");
@@ -47,7 +49,8 @@ void DieselHeaterBLE::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
       break;
 
     case ESP_GATTC_NOTIFY_EVT:
-      if (param->notify.conn_id != this->parent()->get_conn_id()) break;
+      if (param->notify.conn_id != this->parent()->get_conn_id())
+        break;
       if (param->notify.handle == this->handle_) {
         std::vector<uint8_t> data(param->notify.value, param->notify.value + param->notify.value_len);
         this->on_notification_received(data);
@@ -64,8 +67,10 @@ void DieselHeaterBLE::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
   }
 }
 
-bool DieselHeaterBLE::ble_write_chr(esp_gatt_if_t gattc_if, esp_bd_addr_t remote_bda, uint16_t handle, uint8_t *data, uint16_t len) {
-  esp_err_t ret = esp_ble_gattc_write_char(gattc_if, 0, handle, len, data, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
+bool DieselHeaterBLE::ble_write_chr(esp_gatt_if_t gattc_if, esp_bd_addr_t remote_bda, uint16_t handle, uint8_t *data,
+                                    uint16_t len) {
+  esp_err_t ret =
+      esp_ble_gattc_write_char(gattc_if, 0, handle, len, data, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
   if (ret != ESP_OK) {
     ESP_LOGD(TAG, "Write characteristic failed, status: %d", ret);
     return false;
@@ -114,7 +119,6 @@ void DieselHeaterBLE::on_notification_received(const std::vector<uint8_t> &data)
     return;
   }
 }
-
 
 void DieselHeaterBLE::update_sensors(const HeaterState &new_state) {
   if (running_state_ != nullptr && running_state_->state != new_state.runningstate) {
@@ -221,45 +225,31 @@ void DieselHeaterBLE::update_sensors(const HeaterState &new_state) {
 }
 
 void DieselHeaterBLE::on_power_level_number(float value) {
-  this->sent_requests(
-      this->controller_->gen_level_command(this->state_, value)
-  );
+  this->sent_requests(this->controller_->gen_level_command(this->state_, value));
 }
-  
+
 void DieselHeaterBLE::on_temp_number(float value) {
-  this->sent_requests(
-      this->controller_->gen_temp_command(this->state_, value)
-  );
+  this->sent_requests(this->controller_->gen_temp_command(this->state_, value));
 }
 
 void DieselHeaterBLE::on_power_switch(bool state) {
-  this->sent_requests(
-      this->controller_->gen_power_command(this->state_, state)
-  );
+  this->sent_requests(this->controller_->gen_power_command(this->state_, state));
 }
 
 void DieselHeaterBLE::on_level_up_button_press() {
-  this->sent_requests(
-      this->controller_->gen_level_up_command(this->state_)
-  );
+  this->sent_requests(this->controller_->gen_level_up_command(this->state_));
 }
 
 void DieselHeaterBLE::on_level_down_button_press() {
-  this->sent_requests(
-      this->controller_->gen_level_down_command(this->state_)
-  );
+  this->sent_requests(this->controller_->gen_level_down_command(this->state_));
 }
 
 void DieselHeaterBLE::on_temp_up_button_press() {
-  this->sent_requests(
-      this->controller_->gen_temp_up_command(this->state_)
-  );
+  this->sent_requests(this->controller_->gen_temp_up_command(this->state_));
 }
 
 void DieselHeaterBLE::on_temp_down_button_press() {
-  this->sent_requests(
-      this->controller_->gen_temp_down_command(this->state_)
-  );
+  this->sent_requests(this->controller_->gen_temp_down_command(this->state_));
 }
 
 }  // namespace diesel_heater_ble
